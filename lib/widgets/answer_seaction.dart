@@ -3,6 +3,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:perp_clone/services/chat_web_service.dart';
 import 'package:perp_clone/theme/colors.dart';
 import 'package:skeletonizer/skeletonizer.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AnswerSection extends StatefulWidget {
   const AnswerSection({super.key});
@@ -14,30 +15,13 @@ class AnswerSection extends StatefulWidget {
 class _AnswerSectionState extends State<AnswerSection> {
   bool isLoading = true;
   String fullResponse = '''
-As of the end of Day 1 in the fourth Test match between India and Australia, the score stands at **Australia 311/6**. The match is being held at the Melbourne Cricket Ground (MCG) on December 26, 2024.
-
-## Match Overview
-- **Toss**: Australia won the toss and opted to bat first.
-- **Top Performers**:
-  - **Steve Smith** is currently unbeaten on **68 runs** from **111 balls**.
-  - **Sam Konstas**, making his Test debut, scored a significant **60 runs** from **65 balls**, contributing to a strong start for Australia.
-  - Other notable contributions include Usman Khawaja and Marnus Labuschagne, both adding valuable runs to the total.
-
-## Session Highlights
-- In the first session, Australia reached **112 runs for the loss of one wicket**, with Konstas and Khawaja building an impressive opening partnership of **89 runs** before Konstas was dismissed by Ravindra Jadeja.
-- After lunch, Australia maintained their momentum but faced a collapse as Jasprit Bumrah struck back, taking crucial wickets that brought India back into contention. Australia went from a strong position of **223/2** to **263/5** at one point, losing three wickets for just nine runs.
-
-## Bowling Performance
-- Indian bowlers had mixed success throughout the day. While Bumrah was effective in the latter stages, picking up key wickets, Jadeja also contributed by taking the first wicket of Konstas.
-- Other bowlers like Akash Deep and Washington Sundar chipped in with one wicket each, helping to restrict Australia's scoring after a dominant start.
-
-## Current Situation
-As play concluded for the day, Australia stood at **311/6**, with Steve Smith holding firm as India looks to capitalize on their late breakthroughs on Day 2. The match remains finely balanced, with both teams having opportunities to seize control as they progress through this critical Test match in the Border-Gavaskar Trophy series[1][2][3][5].
+As of the end of Day 1 in the fourth Test match between India and Australia, the score stands at **Australia 311/6**...
 ''';
+
+  List images = [];
 
   @override
   void initState() {
-    // TODO: implement initState
     super.initState();
     ChatWebService().contentStream.listen((data) {
       if (isLoading) {
@@ -45,42 +29,133 @@ As play concluded for the day, Australia stood at **311/6**, with Steve Smith ho
       }
       setState(() {
         fullResponse += data['data'];
+        if (data.containsKey('images')) {
+          images = data['images'];
+        }
         isLoading = false;
       });
     });
   }
 
+  Future<void> _launchUrl(String url) async {
+    Uri uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 5),
-        Text(
-          "Professor Perpy",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 5),
-        Skeletonizer(
-          enabled: isLoading,
-          effect: const ShimmerEffect(
-            baseColor: Colors.grey,
-            highlightColor: Colors.white70,
-            duration: Duration(seconds: 1),
+        // Left: Text Section
+        Expanded(
+          flex: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 5),
+              const Text(
+                "Professor Perpy",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 5),
+              Skeletonizer(
+                enabled: isLoading,
+                effect: const ShimmerEffect(
+                  baseColor: Colors.grey,
+                  highlightColor: Colors.white70,
+                  duration: Duration(seconds: 1),
+                ),
+                child: Markdown(
+                  data: fullResponse,
+                  shrinkWrap: true,
+                  styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context))
+                      .copyWith(
+                        codeblockDecoration: BoxDecoration(
+                          color: AppColors.cardColor,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        code: const TextStyle(fontSize: 16),
+                      ),
+                ),
+              ),
+            ],
           ),
-          child: Markdown(
-            data: fullResponse,
-            shrinkWrap: true,
-            styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context))
-                .copyWith(
-                  codeblockDecoration: BoxDecoration(
-                    color: AppColors.cardColor,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  code: const TextStyle(fontSize: 16),
-                ), //
-          ),
         ),
+
+        // Right: Image Section
+        if (images.isNotEmpty)
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 24.0, top: 8.0),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: images.map<Widget>((img) {
+                  final imageUrl = img is String ? img : img['url'];
+                  final sourceUrl = img is String
+                      ? img
+                      : (img['src'] ?? img['url']);
+
+                  return GestureDetector(
+                    onTap: () => _launchUrl(sourceUrl),
+                    child: Container(
+                      width: 160,
+                      constraints: const BoxConstraints(
+                        minHeight: 100,
+                        maxHeight: 200,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.grey[300],
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 6,
+                            offset: Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          width: 160,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return Container(
+                              color: Colors.grey[200],
+                              alignment: Alignment.center,
+                              child: CircularProgressIndicator(
+                                value: progress.expectedTotalBytes != null
+                                    ? progress.cumulativeBytesLoaded /
+                                          (progress.expectedTotalBytes ?? 1)
+                                    : null,
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                color: Colors.grey[400],
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.broken_image,
+                                  size: 40,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
       ],
     );
   }
